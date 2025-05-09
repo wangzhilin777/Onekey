@@ -121,6 +121,7 @@ async def HandleDepotFiles(
 ) -> List[Tuple[str, str]]:
     collected = []
     depot_map = {}
+    depot_lua = "0"
     try:
         selected_repo, latest_date = await GetLatestRepoInfo(
             repos, app_id, headers=HEADER
@@ -161,7 +162,44 @@ async def HandleDepotFiles(
                         branch_res.json()["commit"]["sha"], file_path, selected_repo
                     )
                     collected.extend(ParseKey(key_content))
+                elif file_path.endswith(".lua"):
+                    save_path = steam_path / "config" / "stplug-in" / file_path
+                    if save_path.exists():
+                        LOG.warning(f"已存在.lua正在删除: {save_path}")
+                        save_path.unlink()  # 或使用 os.remove(str(save_path))
 
+                    content = await FetchFiles(
+                        branch_res.json()["commit"]["sha"], file_path, selected_repo
+                    )
+                    LOG.info(f".lua下载成功: {file_path}")
+                    with open(save_path, "wb") as f:
+                        f.write(content) 
+                    depot_lua = "1"
+                elif file_path.endswith(".st"):
+                    save_path = steam_path / "config" / "stplug-in" / file_path
+                    if save_path.exists():
+                        LOG.warning(f"已存在.st正在删除: {save_path}")
+                        save_path.unlink()  # 或使用 os.remove(str(save_path))
+
+                    content = await FetchFiles(
+                        branch_res.json()["commit"]["sha"], file_path, selected_repo
+                    )
+                    LOG.info(f".st下载成功: {file_path}")
+                    with open(save_path, "wb") as f:
+                        f.write(content)
+                    depot_lua = "1" 
+                elif file_path.endswith(".bin"):
+                    save_path = steam_path / "config" / "StatsExport" / file_path
+                    if save_path.exists():
+                        LOG.warning(f"已存在.bin成就文件，正在删除: {save_path}")
+                        save_path.unlink()  # 或使用 os.remove(str(save_path))
+
+                    content = await FetchFiles(
+                        branch_res.json()["commit"]["sha"], file_path, selected_repo
+                    )
+                    LOG.info(f".bin下载成功: {file_path}")
+                    with open(save_path, "wb") as f:
+                        f.write(content)
             for item in tree_res.json()["tree"]:
                 if not item["path"].endswith(".manifest"):
                     continue
@@ -183,7 +221,7 @@ async def HandleDepotFiles(
         LOG.error(f"HTTP错误: {e.response.status_code}")
     except Exception as e:
         LOG.error(f"文件处理失败: {str(e)}")
-    return collected, depot_map  # type: ignore
+    return collected, depot_map, depot_lua # type: ignore
 
 
 async def FetchFiles(sha: str, path: str, repo: str):
@@ -307,7 +345,10 @@ async def Main(app_id: str):
         await CheckCN()
         await CheckLimit(HEADER)
 
-        depot_data, depot_map = await HandleDepotFiles(REPO_LIST, app_id, STEAM_PATH)
+        depot_data, depot_map, depot_lua = await HandleDepotFiles(REPO_LIST, app_id, STEAM_PATH)
+        if (depot_lua == "1"):
+            LOG.info(f"已加载.lua、.st配置,重启steam生效")
+            return os.system("pause")
 
         if (not depot_data) or (not depot_map):
             LOG.error(f"未找到此游戏的清单")
